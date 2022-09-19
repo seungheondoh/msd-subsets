@@ -1,7 +1,7 @@
 ### Extended Cleaned tag and Artist-Level Stratified split (eCALS)
 
 <p align = "center">
-<img src = "https://imgur.com/a/A3Ums02">
+<img src = "https://imgur.com/jdYrysT">
 </p>
 
 ### Dataset stat
