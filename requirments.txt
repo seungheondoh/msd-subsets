@@ -1,5 +1,5 @@
 youtube-dl==2021.6.6
-pandas==1.3.0
+pandas>=1.3.0
 cython==0.29.28
 tables==3.6.1
 scikit-multilearn==0.2.0

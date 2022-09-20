@@ -15,7 +15,7 @@ from sklearn.model_selection import train_test_split
 from audio_utils import load_audio
 from sklearn.preprocessing import MultiLabelBinarizer
 
-from constants import DATASET, DATA_LENGTH, STR_CH_FIRST, MUSIC_SAMPLE_RATE, BLACK_LIST
+from constants import DATASET, DATA_LENGTH, STR_CH_FIRST, MUSIC_SAMPLE_RATE, BLACK_LIST, LASTFM_TAG_INFO
 
 NaN_to_emptylist = lambda d: d if isinstance(d, list) or isinstance(d, str) else []
 flatten_list_of_list = lambda l: [item for sublist in l for item in sublist]
@@ -47,6 +47,10 @@ def getMsdInfo(msd_path):
     msd_db = msd_db.set_index('track_id')
     return msd_db
 
+def _json_dump(path, item):
+    with open(path, mode="w") as io:
+        json.dump(item, io, indent=4)
+
 @contextmanager
 def poolcontext(*args, **kwargs):
     pool = multiprocessing.Pool(*args, **kwargs)
@@ -54,28 +58,26 @@ def poolcontext(*args, **kwargs):
     pool.terminate()
     
 def msd_resampler(_id, path):
-    save_name = os.path.join(DATASET,'msd','npy', path.replace(".mp3",".npy"))
-    if os.path.exists(save_name):
-        print("file already exist: ", _id)
-    else:
-        try:
-            src, _ = load_audio(
-                path=os.path.join(DATASET,'msd','songs',path),
-                ch_format= STR_CH_FIRST,
-                sample_rate= MUSIC_SAMPLE_RATE,
-                downmix_to_mono= True)
-            if src.shape[-1] < DATA_LENGTH: # short case
-                pad = np.zeros(DATA_LENGTH)
-                pad[:src.shape[-1]] = src
-                src = pad
-            elif src.shape[-1] > DATA_LENGTH: # too long case
-                src = src[:DATA_LENGTH]
-            
-            if not os.path.exists(os.path.dirname(save_name)):
-                os.makedirs(os.path.dirname(save_name))
-            np.save(save_name, src.astype(np.float32))
-        except:
-            np.save(os.path.join(DATASET,'msd', "error", _id + ".npy"), _id) # check black case
+    save_name = os.path.join(DATASET,'npy', path.replace(".mp3",".npy"))
+    try:
+        src, _ = load_audio(
+            path=os.path.join(DATASET,'songs',path),
+            ch_format= STR_CH_FIRST,
+            sample_rate= MUSIC_SAMPLE_RATE,
+            downmix_to_mono= True)
+        if src.shape[-1] < DATA_LENGTH: # short case
+            pad = np.zeros(DATA_LENGTH)
+            pad[:src.shape[-1]] = src
+            src = pad
+        elif src.shape[-1] > DATA_LENGTH: # too long case
+            src = src[:DATA_LENGTH]
+        
+        if not os.path.exists(os.path.dirname(save_name)):
+            os.makedirs(os.path.dirname(save_name))
+        np.save(save_name, src.astype(np.float32))
+    except:
+        os.makedirs(os.path.join(DATASET,"error"), exist_ok=True)
+        np.save(os.path.join(DATASET,"error", _id + ".npy"), _id) # check black case
 
 def binary_df_to_list(binary, tags, indices, data_type):
     list_of_tag = []
@@ -96,7 +98,6 @@ def lastfm_processor(lastfm_path):
     """
     lastfm_tags = open(os.path.join(lastfm_path, "50tagList.txt"),'r').read().splitlines()
     lastfm_tags = [i.lower() for i in lastfm_tags]
-    torch.save(lastfm_tags, os.path.join(DATASET, "supervision", "lastfm_tags.pt"))
     # lastfm split and 
     train_list = pickle.load(open(os.path.join(lastfm_path, "filtered_list_train.cP"), 'rb'))
     test_list = pickle.load(open(os.path.join(lastfm_path, "filtered_list_test.cP"), 'rb'))
@@ -108,6 +109,11 @@ def lastfm_processor(lastfm_path):
         "valid_track": train_list[201680:],
         "test_track": test_list,
     }
+    
+    _json_dump(os.path.join(lastfm_path, "lastfm_tags.json"), lastfm_tags)
+    _json_dump(os.path.join(lastfm_path, "lastfm_tag_info.json"), LASTFM_TAG_INFO)
+    _json_dump(os.path.join(lastfm_path, "lastfm_track_split.json"), track_split)
+
     lastfm_binary = pd.DataFrame(binary, index=total_list, columns=lastfm_tags)
     df_lastfm = binary_df_to_list(binary=binary, tags=lastfm_tags, indices=total_list, data_type="lastfm")
     return df_lastfm, track_split
@@ -147,9 +153,9 @@ def allmusic_processor(allmusic_path):
         tag_stats[category[:-1]] = {i:j for i,j in Counter(flatten_list_of_list(df_all[category])).most_common()}
         for tag in set(flatten_list_of_list(df_all[category])):
             tag_dict[tag] = category[:-1]
-    torch.save(list(tag_dict.keys()), os.path.join(DATASET, "supervision", "allmusic_tags.pt"))
-    torch.save(tag_dict, os.path.join(DATASET, "supervision", "allmusic_tag_info.pt"))
-    torch.save(tag_stats, os.path.join(DATASET, "supervision", "allmusic_tag_stats.pt"))
+    _json_dump(os.path.join(allmusic_path, "allmusic_tags.json"), list(tag_dict.keys()))
+    _json_dump(os.path.join(allmusic_path, "allmusic_tag_info.json"), tag_dict)
+    _json_dump(os.path.join(allmusic_path, "allmusic_tag_stats.json"), tag_stats)
 
     tag_list = df_all['genres']+df_all['styles']+df_all['moods']+df_all['themes']
     df_allmusic = pd.DataFrame(index=df_all.index, columns=["allmusic"])
@@ -177,9 +183,9 @@ def msd500_processor(msd500_path):
     df_msd500['is_msd500'] = [True for i in range(len(df_msd500))]
     df_msd500.index.name = "track_id"
     msd500_tag_stat = {i:j for i,j in Counter(flatten_list_of_list(df_msd500['msd500'])).most_common()}
-    torch.save(msd500_tag_info, os.path.join(DATASET, "supervision", "msd500_tag_info.pt"))
-    torch.save(msd500_tags[0], os.path.join(DATASET, "supervision", "msd500_tags.pt"))
-    torch.save(msd500_tag_stat, os.path.join(DATASET, "supervision", "msd500_tag_stats.pt"))
+    _json_dump(os.path.join(msd500_path, "msd500_tag_info.json"), msd500_tag_info)
+    _json_dump(os.path.join(msd500_path, "msd500_tags.json"), list(msd500_tags[0]))
+    _json_dump(os.path.join(msd500_path, "msd500_tag_stats.json"), msd500_tag_stat)
     return df_msd500
 
 def _check_mp3_file(df_msd, id_to_path, MSD_id_to_7D_id):
@@ -192,10 +198,9 @@ def _check_mp3_file(df_msd, id_to_path, MSD_id_to_7D_id):
     df_msd = df_msd.drop(error_id)
     return df_msd, mp3_path
 
-def _track_split(df_target, msd_path, types = "cals"):
+def _track_split(df_target, msd_path, types = "ecals"):
     track_split = {}
     if types == "ecals":
-        # check no label data
         df_target = df_target[df_target['tag'].apply(lambda x: len(x) != 0)]
     for i in set(df_target['splits']):
         track_list = list(df_target[df_target['splits'] == i].index)
@@ -207,16 +212,14 @@ def _track_split(df_target, msd_path, types = "cals"):
             track_split['test_track'] = track_list
         elif i == "STUDENT":
             track_split['extra_track'] = track_list
-    
     _tag_stat = {i:j for i,j in Counter(flatten_list_of_list(list(df_target['tag']))).most_common()}
-    torch.save(list(_tag_stat.keys()), os.path.join(DATASET, "supervision", f"{types}_tags.pt"))
-    torch.save(_tag_stat, os.path.join(DATASET, "supervision", f"{types}_tag_stats.pt"))
-
     track_list = track_split['train_track'] + track_split['valid_track']+ track_split['test_track']
     print("finish msd extraction", len(track_list), "extra_track: ", len(track_split['extra_track']), "tag: ", len(_tag_stat))
     
-    with open(os.path.join(msd_path, f"{types}_track_split.json"), mode="w") as io:
-        json.dump(track_split, io, indent=4)
+    _json_dump(os.path.join(msd_path, f"{types}_track_split.json"), track_split)
+    _json_dump(os.path.join(msd_path, f"{types}_tags.json"), list(_tag_stat.keys()))
+    _json_dump(os.path.join(msd_path, f"{types}_tag_stats.json"), _tag_stat)
+    return track_split
 
 def _check_stat(df, track_list):
     df_test = df.loc[track_list]
@@ -225,7 +228,6 @@ def _check_stat(df, track_list):
 
 def filtering(df_tags, tr_track, va_track, te_track):
     merge_tag = df_tags['cals'] + df_tags['lastfm'] + df_tags['msd500'] + df_tags['allmusic']
-    merge_tag.to_csv("before_filter.csv")
     merge_tag = merge_tag.apply(lambda x: _remove(x))
     merge_tag = merge_tag.apply(lambda x: list(map(tag_normalize, x)))
     tag_list = merge_tag.apply(set).apply(list)
@@ -251,11 +253,13 @@ def MSD_processor(msd_path):
     allmusic_path = os.path.join(msd_path, "allmusic_annotation")
     msd500_path = os.path.join(msd_path, "msd500_annotation")
     cals_path = os.path.join(msd_path, "cals_annotation")
+    ecals_path = os.path.join(msd_path, "ecals_annotation")
+    os.makedirs(ecals_path, exist_ok=True)
 
     MSD_id_to_7D_id = pickle.load(open(os.path.join(lastfm_path, "MSD_id_to_7D_id.pkl"), 'rb'))
     id_to_path = pickle.load(open(os.path.join(lastfm_path, "7D_id_to_path.pkl"), 'rb'))
     lastfm_tags = [i.lower() for i in open(os.path.join(lastfm_path, "50tagList.txt"),'r').read().splitlines()]
-    cals_split = pd.read_csv(os.path.join(msd_path, "cals_annotation/msd_splits.tsv"), sep="\t").rename(columns={"clip_ids":"track_id"}).set_index("track_id")
+    cals_split = pd.read_csv(os.path.join(cals_path, "msd_splits.tsv"), sep="\t").rename(columns={"clip_ids":"track_id"}).set_index("track_id")
     df_msdmeta = getMsdInfo(meta_path)
     df_cals = cals_processor(cals_path)
     df_lastfm, _ = lastfm_processor(lastfm_path)
@@ -295,10 +299,14 @@ def MSD_processor(msd_path):
     binary_error = [i for i in error_ids if i in df_binary.index]
     df_binary = df_binary.drop(binary_error) # drop errors   
 
-    df_binary.to_csv(os.path.join(msd_path, 'ecals_binary.csv'))
+    df_binary.to_csv(os.path.join(ecals_path, 'ecals_binary.csv'))
     df_target['track_id'] = df_target.index
-    
-    annoation_dict = df_target[["tag","release","artist_name","year","title",'track_id']].to_dict('index') # for small
-    torch.save(annoation_dict, os.path.join(msd_path, 'annotation.pt')) # 183M
-    _track_split(df_target, msd_path, types = "cals")
-    _track_split(df_target, msd_path, types = "ecals")
+    track_split = _track_split(df_target, ecals_path, types = "ecals")
+    ecals_track = track_split['train_track'] + track_split['valid_track'] + track_split['test_track'] + track_split['extra_track']
+    annotation_dict = df_target[["tag","release","artist_name","year","title",'track_id']].to_dict('index') # for small
+    target_anotation_dict = {i:annotation_dict[i] for i in ecals_track}
+    print(len(target_anotation_dict))
+    with open(os.path.join(ecals_path, f"annotation.json"), mode="w") as io:
+        json.dump(target_anotation_dict, io)
+        
+    # torch.save(annoation_dict, os.path.join(msd_path, 'annotation.pt')) # 183M
