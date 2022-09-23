@@ -10,6 +10,12 @@
 ### Download Source Dataset from Zenodo
 
 ```
+wget https://zenodo.org/record/7107130/files/dataset.tar.gz
+tar -xvf dataset.tar.gz
+```
+
+
+```
 └── dataset
     ├── allmusic_annotation
     │   └── ground_truth_assignments
