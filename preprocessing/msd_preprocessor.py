@@ -308,5 +308,3 @@ def MSD_processor(msd_path):
     print(len(target_anotation_dict))
     with open(os.path.join(ecals_path, f"annotation.json"), mode="w") as io:
         json.dump(target_anotation_dict, io)
-        
-    # torch.save(annoation_dict, os.path.join(msd_path, 'annotation.pt')) # 183M
