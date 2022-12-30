@@ -116,11 +116,14 @@ Unique Year: 90
 ```
 wget https://zenodo.org/record/7107130/files/dataset.tar.gz
 tar -xvf dataset.tar.gz
+cd dataset
+wget http://millionsongdataset.com/sites/default/files/AdditionalFiles/track_metadata.db
 ```
 
 
 ```
 └── dataset
+    track_metadata.db
     ├── allmusic_annotation
     │   └── ground_truth_assignments
     │       ├── AMG_Multilabel_tagsets
