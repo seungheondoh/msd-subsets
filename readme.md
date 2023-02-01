@@ -1,5 +1,6 @@
 # Extended Cleaned tag and Artist-Level Stratified split (eCALS)
 
+For quick start, Just donwload preprocessed dataset from zenodo.
 - [Zenodo-Link](https://zenodo.org/record/7107130)
 
 We introduce the extended tag version of CALS split (cleaned and artist-level stratified) for the Million Song Dataset (MSD). Different from the previously CALS dataset split, we provide 1054 vocabulary and caption level tag sequences instead of 50 small vocabs. Since we inherit the existing cals split, there is no difference in the test dataset. However, we use all tag annotations in the existing tag annotations `msd50, msd500, and allmusic`. This is the dataset repository for the paper: [Toward Universal Text-to-Music Retrieval](https://arxiv.org/abs/2211.14558)
